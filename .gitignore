@@ -7,12 +7,16 @@
 # 本地环境变量(包含 API key 等敏感信息)
 .env
 .env.local
+# 用户运行时模型选择(由 server 启动生成/读写)
+model-settings.json
 
 # ============================================================
 # 分析历史与运行产物(应从 .env/运行生成,不入仓)
 # ============================================================
 # 历史分析结果(JSON 文件,会持续累积)
 ai_analysis_history/
+# 软链形式的分析历史目录(指向 openclaw_mz 知识库)
+ai_analysis_history
 
 # 服务器日志
 server.log
@@ -43,7 +47,16 @@ server-testkey.log
 # Node / npm
 # ============================================================
 node_modules/
+# package-lock.json 在 node_modules 内,容易被工具误改;忽略子路径 lock
+node_modules/.package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .gstack/
+
+# ============================================================
+# Python 缓存
+# ============================================================
+__pycache__/
+*.pyc
+*.pyo
