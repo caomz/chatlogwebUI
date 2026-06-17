@@ -4,10 +4,35 @@ class ModelSettings {
         this.modal = document.getElementById('modelSettingsModal');
         this.form = document.getElementById('modelSettingsForm');
         this.currentSettings = this.loadSettings();
-        
+
         this.initEventListeners();
         this.loadCurrentSettings();
+        this.hydrateFromServer();
     }
+
+    // 从后端拉真值,失败时静默保留 localStorage / 默认值
+    // 注意:后端 GET 接口会对 apiKey 做脱敏,所以这里不覆盖用户已有的 apiKey 字段,
+    // 只把 modelProvider / model 跟后端真值对齐。
+    async hydrateFromServer() {
+        try {
+            const res = await fetch('/api/model-settings');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || !data.success || !data.settings) return;
+            const server = this.normalizeSettings(data.settings);
+            const merged = {
+                ...this.currentSettings,
+                modelProvider: server.modelProvider,
+                deepseek:   { ...this.currentSettings.deepseek,   model: server.deepseek.model },
+                gemini:     { ...this.currentSettings.gemini,     model: server.gemini.model },
+                minimax:    { ...this.currentSettings.minimax,    model: server.minimax.model }
+            };
+            this.applySettings(merged);
+        } catch (err) {
+            console.warn('加载后端模型设置失败,使用本地缓存:', err);
+        }
+    }
+
 
     // 初始化事件监听器
     initEventListeners() {
@@ -69,6 +94,10 @@ class ModelSettings {
         document.getElementById('geminiApiKey').addEventListener('input', (e) => {
             this.validateApiKey('gemini', e.target.value);
         });
+
+        document.getElementById('minimaxApiKey').addEventListener('input', (e) => {
+            this.validateApiKey('minimax', e.target.value);
+        });
     }
 
     // 打开弹窗
@@ -87,13 +116,20 @@ class ModelSettings {
     switchProvider(provider) {
         const deepseekConfig = document.getElementById('deepseekConfig');
         const geminiConfig = document.getElementById('geminiConfig');
+        const minimaxConfig = document.getElementById('minimaxConfig');
 
         if (provider === 'DeepSeek') {
             deepseekConfig.style.display = 'block';
             geminiConfig.style.display = 'none';
+            minimaxConfig.style.display = 'none';
         } else if (provider === 'Gemini') {
             deepseekConfig.style.display = 'none';
             geminiConfig.style.display = 'block';
+            minimaxConfig.style.display = 'none';
+        } else if (provider === 'MiniMax') {
+            deepseekConfig.style.display = 'none';
+            geminiConfig.style.display = 'none';
+            minimaxConfig.style.display = 'block';
         }
     }
 
@@ -131,6 +167,9 @@ class ModelSettings {
         } else if (provider === 'gemini') {
             isValid = apiKey.startsWith('AI') && apiKey.length > 20;
             message = isValid ? '✓ API Key 格式正确' : '✗ Gemini API Key 应以 AI 开头';
+        } else if (provider === 'minimax') {
+            isValid = apiKey.startsWith('sk-') && apiKey.length > 20;
+            message = isValid ? '✓ API Key 格式正确' : '✗ MiniMax API Key 应以 sk- 开头';
         }
 
         statusElement.textContent = message;
@@ -195,12 +234,13 @@ class ModelSettings {
         return {
             modelProvider: document.querySelector('input[name="modelProvider"]:checked').value,
             deepseek: {
-                model: document.getElementById('deepseekModel').value,
-                apiKey: document.getElementById('deepseekApiKey').value
+                model: document.getElementById('deepseekModel').value
             },
             gemini: {
-                model: document.getElementById('geminiModel').value,
-                apiKey: document.getElementById('geminiApiKey').value
+                model: document.getElementById('geminiModel').value
+            },
+            minimax: {
+                model: document.getElementById('minimaxModel').value
             }
         };
     }
@@ -215,8 +255,13 @@ class ModelSettings {
 
         try {
             const settings = this.getCurrentFormData();
-            
-            // 保存到本地存储
+
+            // 防御性:即便后端不要 apiKey,本地也不存
+            for (const k of ['deepseek', 'gemini', 'minimax']) {
+                if (settings[k]) delete settings[k].apiKey;
+            }
+
+            // 保存到本地存储(apiKey 已剥)
             localStorage.setItem('modelSettings', JSON.stringify(settings));
             
             // 发送到服务器
@@ -263,7 +308,7 @@ class ModelSettings {
         const saved = localStorage.getItem('modelSettings');
         if (saved) {
             try {
-                return JSON.parse(saved);
+                return this.normalizeSettings(JSON.parse(saved));
             } catch (error) {
                 console.warn('解析保存的设置失败:', error);
                 return this.getDefaultSettings();
@@ -283,7 +328,24 @@ class ModelSettings {
             gemini: {
                 model: 'gemini-2.5-pro',
                 apiKey: ''
+            },
+            minimax: {
+                model: 'MiniMax-M3',
+                apiKey: ''
             }
+        };
+    }
+
+    normalizeSettings(settings = {}) {
+        const defaults = this.getDefaultSettings();
+        const allowedProviders = ['DeepSeek', 'Gemini', 'MiniMax'];
+        const modelProvider = allowedProviders.includes(settings.modelProvider) ? settings.modelProvider : defaults.modelProvider;
+
+        return {
+            modelProvider,
+            deepseek: { ...defaults.deepseek, ...(settings.deepseek || {}) },
+            gemini: { ...defaults.gemini, ...(settings.gemini || {}) },
+            minimax: { ...defaults.minimax, ...(settings.minimax || {}) }
         };
     }
 
@@ -294,23 +356,38 @@ class ModelSettings {
 
     // 应用设置到表单
     applySettings(settings) {
+        const normalized = this.normalizeSettings(settings);
+
         // 设置提供商
-        document.querySelector(`input[name="modelProvider"][value="${settings.modelProvider}"]`).checked = true;
-        this.switchProvider(settings.modelProvider);
+        const providerRadio = document.querySelector(`input[name="modelProvider"][value="${normalized.modelProvider}"]`);
+        if (providerRadio) {
+            providerRadio.checked = true;
+        }
+        this.switchProvider(normalized.modelProvider);
 
         // 设置 DeepSeek 配置
-        document.getElementById('deepseekModel').value = settings.deepseek.model;
-        document.getElementById('deepseekApiKey').value = settings.deepseek.apiKey;
-        if (settings.deepseek.apiKey) {
-            this.validateApiKey('deepseek', settings.deepseek.apiKey);
-        }
+        document.getElementById('deepseekModel').value = normalized.deepseek.model;
+        // apiKey 永远不在前端表单中显示(后端 GET 不再返,前端也不存)
+        document.getElementById('deepseekApiKey').value = '';
+        document.getElementById('deepseekApiKey').placeholder = normalized.deepseek.hasApiKey
+            ? '✓ 已在 .env 中配置'
+            : '请在 .env 中设置 DEEPSEEK_API_KEY';
 
         // 设置 Gemini 配置
-        document.getElementById('geminiModel').value = settings.gemini.model;
-        document.getElementById('geminiApiKey').value = settings.gemini.apiKey;
-        if (settings.gemini.apiKey) {
-            this.validateApiKey('gemini', settings.gemini.apiKey);
-        }
+        document.getElementById('geminiModel').value = normalized.gemini.model;
+        document.getElementById('geminiApiKey').value = '';
+        document.getElementById('geminiApiKey').placeholder = normalized.gemini.hasApiKey
+            ? '✓ 已在 .env 中配置'
+            : '请在 .env 中设置 GEMINI_API_KEY';
+
+        // 设置 MiniMax 配置
+        document.getElementById('minimaxModel').value = normalized.minimax.model;
+        document.getElementById('minimaxApiKey').value = '';
+        document.getElementById('minimaxApiKey').placeholder = normalized.minimax.hasApiKey
+            ? '✓ 已在 .env 中配置'
+            : '请在 .env 中设置 MINIMAX_API_KEY';
+
+        this.currentSettings = normalized;
     }
 
     // 显示通知

@@ -12,16 +12,20 @@ PORT=3000
 # AI模型配置
 # ===========================================
 
-# AI提供商选择: DeepSeek 或 Gemini
-MODEL_PROVIDER=DeepSeek
+# AI提供商选择: DeepSeek / Gemini / MiniMax
+MODEL_PROVIDER=MiniMax
 
 # DeepSeek配置
 DEEPSEEK_API_KEY=
 DEEPSEEK_MODEL=deepseek-chat
 
-# Gemini配置  
+# Gemini配置
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-pro
+
+# MiniMax配置（OpenAI兼容）
+MINIMAX_API_KEY=
+MINIMAX_MODEL=MiniMax-M3
 
 # ===========================================
 # 定时任务配置
@@ -41,12 +45,14 @@ SCHEDULED_ANALYSIS_TIME=0 0 8 * * *
 # 1. API Key获取方式：
 #    - DeepSeek: https://www.deepseek.com/
 #    - Gemini: https://aistudio.google.com/
+#    - MiniMax: https://api.minimaxi.com/
 #
 # 2. 模型选择建议：
 #    - DeepSeek: deepseek-chat (推荐) 或 deepseek-reasoner
 #    - Gemini: gemini-2.5-pro (推荐) 或 gemini-pro
+#    - MiniMax: MiniMax-M3 (推荐) 或 MiniMax-M3-highspeed
 #
 # 3. 安全提醒：
 #    - 请勿将包含真实API Key的.env文件提交到代码仓库
 #    - 定期更换API Key以确保安全
-#    - 使用时请确保网络环境可以访问对应的AI服务 
+#    - 使用时请确保网络环境可以访问对应的AI服务

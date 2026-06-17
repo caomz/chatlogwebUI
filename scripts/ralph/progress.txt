@@ -1,0 +1,5 @@
+## Codebase Patterns
+- 本项目是 Node.js + Express + EJS 应用；核心逻辑主要集中在 `server.js`，主界面在 `views/index.ejs`。
+- 基线语法检查使用 `node --check server.js`；涉及定时任务时同时检查 `node --check test-scheduler.js`。
+- 配置持久化类需求必须验证 save/get round-trip，必要时重启服务后复查。
+

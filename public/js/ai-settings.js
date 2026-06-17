@@ -24,18 +24,143 @@ class AISettingsManager {
         };
         
         // 动态分析项管理
+        // 单一事实源:服务端 /api/get-analysis-config(写到 ai-settings.json)。
+        // localStorage 仅作为离线 cache,初始化时若服务端有真值,以服务端为准。
         this.dynamicAnalysisItems = this.loadDynamicItems();
         this.currentEditingType = null;
         this.originalGroupOptions = []; // 存储原始群聊数据
         this.searchDebounceTimeout = null; // 搜索防抖计时器
         this.bindEvents();
-        
+        this.hydrateFromServer();
+
         // 初始化完成后，更新所有按钮的显示名称
         setTimeout(() => {
             this.initializeDisplayNames();
         }, 100);
-        
+
         console.log('AI设置管理器初始化完成');
+    }
+
+    stripDynamicPrefix(type) {
+        let id = String(type || '');
+        while (id.startsWith('dynamic_')) {
+            id = id.slice('dynamic_'.length);
+        }
+        return id;
+    }
+
+    toDynamicKey(type) {
+        const canonicalId = this.stripDynamicPrefix(type);
+        return canonicalId ? `dynamic_${canonicalId}` : '';
+    }
+
+    isDynamicType(type) {
+        const canonicalId = this.stripDynamicPrefix(type);
+        if (!canonicalId) return false;
+        return String(type || '').startsWith('dynamic_') ||
+            this.dynamicAnalysisItems.some(item => this.stripDynamicPrefix(item.id) === canonicalId);
+    }
+
+    findDynamicItem(type) {
+        const canonicalId = this.stripDynamicPrefix(type);
+        return this.dynamicAnalysisItems.find(item => this.stripDynamicPrefix(item.id) === canonicalId);
+    }
+
+    getStoredSettings(type) {
+        const dynamicKey = this.toDynamicKey(type);
+        const canonicalId = this.stripDynamicPrefix(type);
+        return this.settings[type] ||
+            (dynamicKey ? this.settings[dynamicKey] : null) ||
+            (canonicalId ? this.settings[canonicalId] : null) ||
+            null;
+    }
+
+    // 从后端拉真值(dynamicAnalysisItems + 各模板 settings),覆盖 localStorage
+    // 服务端 /api/get-analysis-config 返 { config: { dynamicAnalysisItems, programming, science, reading, ... } }
+    async hydrateFromServer() {
+        try {
+            const res = await fetch('/api/get-analysis-config');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || !data.success || !data.config) return;
+
+            // 合并:服务端真值覆盖 localStorage
+            const serverConfig = data.config;
+            if (Array.isArray(serverConfig.dynamicAnalysisItems)) {
+                this.dynamicAnalysisItems = serverConfig.dynamicAnalysisItems;
+                localStorage.setItem('dynamicAnalysisItems', JSON.stringify(this.dynamicAnalysisItems));
+            }
+            // 三个固定模板 settings 也用服务端真值
+            for (const key of ['programming', 'science', 'reading']) {
+                if (serverConfig[key]) {
+                    this.settings[key] = { ...(this.settings[key] || {}), ...serverConfig[key] };
+                }
+            }
+            Object.keys(serverConfig).forEach(key => {
+                if (key.startsWith('dynamic_') && serverConfig[key] && typeof serverConfig[key] === 'object') {
+                    this.settings[key] = { ...(this.settings[key] || {}), ...serverConfig[key] };
+                }
+            });
+            localStorage.setItem('aiAnalysisSettings', JSON.stringify(this.settings));
+
+            // 触发 UI 重渲染(动态项列表 + 按钮显示名)
+            this.renderDynamicItems && this.renderDynamicItems();
+            if (typeof this.initializeDisplayNames === 'function') this.initializeDisplayNames();
+            // 触发 app.js 重渲染动态项 DOM(处理初始化时序:hydrate 比 initDynamicAnalysisItems 晚完成的情况)
+            if (typeof window.chatlogApp !== 'undefined' && window.chatlogApp && typeof window.chatlogApp.loadDynamicAnalysisItems === 'function') {
+                window.chatlogApp.loadDynamicAnalysisItems();
+            }
+        } catch (err) {
+            console.warn('从服务端加载 AI 配置失败,使用本地缓存:', err);
+        }
+    }
+
+    // 同步到服务端(在 saveSettings / saveDynamicItems 之外另调一次)
+    // 改为可等待并检查 response.ok / result.success,失败时返回 false 让调用方决定如何提示
+    async syncToServer(deletedDynamicIds = []) {
+        try {
+            const analysisConfig = {
+                dynamicAnalysisItems: this.dynamicAnalysisItems || []
+            };
+            if (deletedDynamicIds.length > 0) {
+                analysisConfig.deletedDynamicIds = deletedDynamicIds;
+            }
+            // 把三个固定模板的 settings 也合并(只有当用户改过 groupName 才有意义,避免空覆盖)
+            for (const key of ['programming', 'science', 'reading']) {
+                if (this.settings[key] && this.settings[key].groupName) {
+                    analysisConfig[key] = this.settings[key];
+                }
+            }
+            (this.dynamicAnalysisItems || []).forEach(item => {
+                const settings = this.getSettings(item.id);
+                const dynamicKey = this.toDynamicKey(item.id);
+                if (dynamicKey) {
+                    analysisConfig[dynamicKey] = {
+                        ...item,
+                        ...settings,
+                        id: this.stripDynamicPrefix(item.id)
+                    };
+                }
+            });
+            const res = await fetch('/api/save-analysis-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ analysisConfig })
+            });
+            if (!res.ok) {
+                console.warn('同步 AI 配置到服务端 HTTP 失败:', res.status);
+                return false;
+            }
+            const result = await res.json();
+            if (!result || result.success !== true) {
+                console.warn('同步 AI 配置到服务端业务失败:', result && result.error);
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.warn('同步 AI 配置到服务端异常(不影响本地保存):', err);
+            return false;
+        }
     }
 
     // 格式化本地日期为YYYY-MM-DD格式
@@ -223,7 +348,7 @@ class AISettingsManager {
     // 获取指定类型的设置
     getSettings(type) {
         // 优先从保存的设置中获取
-        const savedSettings = this.settings[type];
+        const savedSettings = this.getStoredSettings(type);
         
         // 如果是默认类型，合并默认设置
         if (this.defaultSettings[type]) {
@@ -231,8 +356,8 @@ class AISettingsManager {
         }
         
         // 如果是动态分析项，从动态分析项数组中获取
-        if (type.startsWith('dynamic_')) {
-            const dynamicItem = this.dynamicAnalysisItems.find(item => item.id === type);
+        if (this.isDynamicType(type)) {
+            const dynamicItem = this.findDynamicItem(type);
             if (dynamicItem) {
                 return { ...dynamicItem, ...savedSettings };
             }
@@ -294,6 +419,8 @@ class AISettingsManager {
         try {
             localStorage.setItem('aiAnalysisSettings', JSON.stringify(this.settings));
             console.log('AI设置已保存');
+            // 同步到服务端(ai-settings.json),刷新页面不再丢
+            this.syncToServer();
         } catch (error) {
             console.error('保存AI设置失败:', error);
         }
@@ -310,45 +437,65 @@ class AISettingsManager {
         }
     }
 
-    // 保存动态分析项
-    saveDynamicItems() {
+    // 保存动态分析项(async,等待服务端确认)
+    async saveDynamicItems() {
         try {
             localStorage.setItem('dynamicAnalysisItems', JSON.stringify(this.dynamicAnalysisItems));
             console.log('动态分析项已保存');
+            // 同步到服务端(ai-settings.json),刷新页面不再丢
+            const ok = await this.syncToServer();
+            if (!ok) {
+                console.warn('动态分析项服务端持久化失败,但本地已保存');
+            }
         } catch (error) {
-            console.error('保存动态分析项失败:', error);
+            console.error('保存动态项失败:', error);
         }
     }
 
-    // 新增动态分析项
-    addDynamicAnalysisItem() {
+    // 新增动态分析项(async,一次性把列表项和详情配置保存)
+    async addDynamicAnalysisItem() {
         const newId = 'dynamic_' + Date.now();
         const newItem = {
             id: newId,
             displayName: '新建分析',
             timeRange: 'yesterday',
             groupName: '',
-            prompt: ''
+            prompt: '',
+            enabled: true
         };
-        
+
         this.dynamicAnalysisItems.push(newItem);
-        this.saveDynamicItems();
-        
-        // 保存设置
-        this.settings[newId] = { ...newItem };
-        this.saveSettings();
-        
+        // 详情配置也准备好
+        this.settings[newId] = { ...newItem, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+
+        // 一次性同步到服务端(避免两次并发 POST 互相覆盖)
+        try {
+            localStorage.setItem('dynamicAnalysisItems', JSON.stringify(this.dynamicAnalysisItems));
+            localStorage.setItem('aiAnalysisSettings', JSON.stringify(this.settings));
+            const ok = await this.syncToServer();
+            if (!ok) {
+                console.warn('新建动态项服务端持久化失败,但本地已保存');
+            }
+        } catch (error) {
+            console.error('新建动态项保存失败:', error);
+        }
+
         return newItem;
     }
 
     // 删除动态分析项
-    removeDynamicAnalysisItem(id) {
-        this.dynamicAnalysisItems = this.dynamicAnalysisItems.filter(item => item.id !== id);
-        this.saveDynamicItems();
+    async removeDynamicAnalysisItem(id) {
+        const canonicalId = this.stripDynamicPrefix(id);
+        const dynamicKey = this.toDynamicKey(id);
+        this.dynamicAnalysisItems = this.dynamicAnalysisItems.filter(item => this.stripDynamicPrefix(item.id) !== canonicalId);
         
         // 删除设置
         delete this.settings[id];
-        this.saveSettings();
+        delete this.settings[canonicalId];
+        delete this.settings[dynamicKey];
+        localStorage.setItem('dynamicAnalysisItems', JSON.stringify(this.dynamicAnalysisItems));
+        localStorage.setItem('aiAnalysisSettings', JSON.stringify(this.settings));
+        await this.syncToServer([dynamicKey]);
     }
 
     // 获取所有分析项（包括默认和动态）
@@ -577,7 +724,7 @@ class AISettingsManager {
         if (title) title.textContent = titles[type] || 'AI分析设置';
 
         // 判断是否为动态分析项，决定是否显示删除按钮
-        const isDynamic = type.startsWith('dynamic_');
+        const isDynamic = this.isDynamicType(type);
         if (deleteBtn) {
             deleteBtn.style.display = isDynamic ? 'inline-block' : 'none';
         }
@@ -644,7 +791,7 @@ class AISettingsManager {
     }
 
     // 保存当前设置
-    saveCurrentSettings() {
+    async saveCurrentSettings() {
         if (!this.currentEditingType) return;
 
         const displayName = document.getElementById('settingsDisplayName')?.value;
@@ -667,19 +814,25 @@ class AISettingsManager {
             newSettings.endDate = endDate;
         }
 
-        this.settings[this.currentEditingType] = newSettings;
-        this.saveSettings();
-        
         // 如果是动态分析项，更新动态分析项数组
-        if (this.currentEditingType.startsWith('dynamic_')) {
-            const dynamicItem = this.dynamicAnalysisItems.find(item => item.id === this.currentEditingType);
+        if (this.isDynamicType(this.currentEditingType)) {
+            const dynamicKey = this.toDynamicKey(this.currentEditingType);
+            this.settings[dynamicKey] = {
+                ...newSettings,
+                id: this.stripDynamicPrefix(this.currentEditingType),
+                updatedAt: new Date().toISOString()
+            };
+            const dynamicItem = this.findDynamicItem(this.currentEditingType);
             if (dynamicItem) {
                 dynamicItem.displayName = newSettings.displayName;
                 dynamicItem.timeRange = newSettings.timeRange;
                 dynamicItem.groupName = newSettings.groupName;
                 dynamicItem.prompt = newSettings.prompt;
-                this.saveDynamicItems();
             }
+            await this.saveDynamicItems();
+        } else {
+            this.settings[this.currentEditingType] = newSettings;
+            this.saveSettings();
         }
         
         // 更新首页显示
@@ -691,14 +844,14 @@ class AISettingsManager {
     }
     
     // 删除当前分析项
-    deleteCurrentItem() {
-        if (!this.currentEditingType || !this.currentEditingType.startsWith('dynamic_')) {
+    async deleteCurrentItem() {
+        if (!this.currentEditingType || !this.isDynamicType(this.currentEditingType)) {
             alert('只能删除自定义添加的分析项');
             return;
         }
         
         if (confirm('确定要删除这个分析项吗？此操作不可恢复。')) {
-            this.removeDynamicAnalysisItem(this.currentEditingType);
+            await this.removeDynamicAnalysisItem(this.currentEditingType);
             
             // 从页面中移除对应的UI元素
             this.removeAnalysisItemFromUI(this.currentEditingType);
@@ -741,8 +894,9 @@ class AISettingsManager {
     // 从UI中移除分析项
     removeAnalysisItemFromUI(type) {
         // 对于动态分析项，需要移除整个容器
-        if (type.startsWith('dynamic_')) {
-            const dynamicItem = document.querySelector(`.dynamic-analysis-item[data-id="${type}"]`);
+        if (this.isDynamicType(type)) {
+            const canonicalId = this.stripDynamicPrefix(type);
+            const dynamicItem = document.querySelector(`.dynamic-analysis-item[data-id="${type}"], .dynamic-analysis-item[data-id="dynamic_${canonicalId}"], .dynamic-analysis-item[data-id="${canonicalId}"]`);
             if (dynamicItem) {
                 dynamicItem.remove();
             }

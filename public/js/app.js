@@ -78,6 +78,7 @@ class ChatlogApp {
         // 表单提交
         document.getElementById('searchForm').addEventListener('submit', (e) => {
             e.preventDefault();
+            this.currentPage = 1;
             this.searchChatlog();
         });
 
@@ -589,6 +590,16 @@ class ChatlogApp {
     }
 
     // 搜索聊天记录
+    normalizeChatlogResponse(data) {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.messages)) return data.messages;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.items)) return data.items;
+        if (Array.isArray(data?.records)) return data.records;
+        return [];
+    }
+
+    // 搜索聊天记录
     async searchChatlog() {
         const timeRange = document.getElementById('timeRange').value;
         const talker = document.getElementById('talkerSelect').value;
@@ -614,7 +625,7 @@ class ChatlogApp {
             // 只有当limit不为null时才添加limit参数
             if (limit !== null) {
                 params.append('limit', limit.toString());
-                params.append('offset', (this.currentPage * limit).toString());
+                params.append('offset', ((this.currentPage - 1) * limit).toString());
             } else {
                 // 不限制时不设置offset
                 params.append('offset', '0');
@@ -626,11 +637,12 @@ class ChatlogApp {
             const data = await response.json();
             
             if (response.ok) {
-                this.currentData = data;
-                this.displayChatMessages(data);
+                const messages = this.normalizeChatlogResponse(data);
+                this.currentData = messages;
+                this.displayChatMessages(messages);
                 // 当不限制条数时，不显示分页控件
                 if (limit !== null) {
-                    this.updatePagination(data.length >= limit);
+                    this.updatePagination(messages.length >= limit);
                 } else {
                     this.updatePagination(false); // 不显示分页
                 }
@@ -737,12 +749,14 @@ class ChatlogApp {
     createMediaContent(message) {
         const mediaDiv = document.createElement('div');
         mediaDiv.className = 'message-media';
+        const mediaId = message.msgId || message.msgid || message.local_id || message.id;
+        const mediaUrl = message.media_url || message.image_url || message.url;
         
         switch (message.type) {
             case 'image':
                 const img = document.createElement('img');
                 img.className = 'message-image';
-                img.src = `/api/media?msgid=${message.msgId || message.id}`;
+                img.src = mediaUrl || `/api/media?msgid=${mediaId}`;
                 img.alt = '图片';
                 img.addEventListener('click', () => {
                     this.showImageModal(img.src);
@@ -766,7 +780,7 @@ class ChatlogApp {
                 `;
                 audioDiv.addEventListener('click', () => {
                     // 这里可以添加音频播放功能
-                    window.open(`/api/media?msgid=${message.msgId || message.id}`);
+                    window.open(mediaUrl || `/api/media?msgid=${mediaId}`);
                 });
                 mediaDiv.appendChild(audioDiv);
                 break;
@@ -779,7 +793,7 @@ class ChatlogApp {
                     <span>${message.filename || '文件'}</span>
                 `;
                 fileDiv.addEventListener('click', () => {
-                    window.open(`/api/media?msgid=${message.msgId || message.id}`);
+                    window.open(mediaUrl || `/api/media?msgid=${mediaId}`);
                 });
                 mediaDiv.appendChild(fileDiv);
                 break;
@@ -876,7 +890,7 @@ class ChatlogApp {
         const nextBtn = document.getElementById('nextBtn');
         const pageInfo = document.getElementById('pageInfo');
         
-        pagination.style.display = 'flex';
+        pagination.style.display = this.currentPage > 1 || hasMore ? 'flex' : 'none';
         
         prevBtn.disabled = this.currentPage <= 1;
         nextBtn.disabled = !hasMore;
@@ -991,6 +1005,9 @@ class ChatlogApp {
                 
                 // 刷新历史记录
                 this.loadAnalysisHistory();
+            } else if (result.reason === 'empty_in_range' || result.reason === 'group_not_found') {
+                // 结构化失败原因：直接展示后端给出的可操作提示，不加「AI分析失败」前缀
+                this.showMessage(result.error || '分析失败', 'error');
             } else {
                 throw new Error(result.error || '分析失败');
             }
@@ -1144,6 +1161,9 @@ class ChatlogApp {
                 
                 // 隐藏自定义分析表单
                 this.toggleCustomAnalysisForm();
+            } else if (result.reason === 'empty_in_range' || result.reason === 'group_not_found') {
+                // 结构化失败原因：直接展示后端给出的可操作提示
+                this.showMessage(result.error || '分析失败', 'error');
             } else {
                 throw new Error(result.error || '分析失败');
             }
@@ -1362,15 +1382,16 @@ class ChatlogApp {
     }
     
     // 新增分析项
-    addNewAnalysisItem() {
+    async addNewAnalysisItem() {
         if (!window.aiSettingsManager) {
             alert('AI设置管理器未初始化');
             return;
         }
-        
-        const newItem = window.aiSettingsManager.addDynamicAnalysisItem();
+
+        // await 服务端持久化,避免 race condition
+        const newItem = await window.aiSettingsManager.addDynamicAnalysisItem();
         this.createDynamicAnalysisItemUI(newItem);
-        
+
         // 立即打开设置对话框
         setTimeout(() => {
             window.aiSettingsManager.openSettings(newItem.id);
@@ -2126,6 +2147,11 @@ class ChatlogApp {
                 
                 // 验证Cron表达式
                 this.validateCronExpression();
+
+                const analysisInterval = parseInt(data.analysisInterval, 10);
+                if (Number.isFinite(analysisInterval)) {
+                    document.getElementById('analysisInterval').value = analysisInterval;
+                }
             }
         } catch (error) {
             console.error('加载当前配置失败:', error);
@@ -2398,6 +2424,11 @@ class ChatlogApp {
                 this.showMessage('请输入有效的Cron表达式', 'error');
                 return;
             }
+
+            if (!Number.isFinite(config.analysisInterval) || config.analysisInterval < 1 || config.analysisInterval > 300) {
+                this.showMessage('分析间隔必须在1到300秒之间', 'error');
+                return;
+            }
             
             // 发送保存请求
             const response = await fetch('/api/save-scheduled-config', {
@@ -2441,7 +2472,10 @@ class ChatlogApp {
             allItems.forEach(item => {
                 const settings = window.aiSettingsManager?.getSettings(item.id);
                 if (settings && settings.groupName) {
-                    analysisConfig[item.id] = settings;
+                    const configKey = window.aiSettingsManager?.isDynamicType(item.id)
+                        ? window.aiSettingsManager.toDynamicKey(item.id)
+                        : item.id;
+                    analysisConfig[configKey] = settings;
                 }
             });
             

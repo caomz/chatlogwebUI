@@ -1,0 +1,21 @@
+{
+  "title": "chatlogwebUI PRD",
+  "branchName": "feature/chatlogwebui-ai-iteration",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Replace this with the first concrete story",
+      "priority": 1,
+      "passes": false,
+      "blocked": false,
+      "retryCount": 0,
+      "notes": "",
+      "description": "Describe the user-visible behavior to implement.",
+      "acceptanceCriteria": [
+        "Implementation matches the story description",
+        "node --check server.js passes",
+        "Relevant UI/API path is verified manually or with browser tooling"
+      ]
+    }
+  ]
+}

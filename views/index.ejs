@@ -510,8 +510,8 @@
                         <div class="config-group">
                             <label for="analysisInterval">分析间隔（秒）：</label>
                             <input type="number" id="analysisInterval" name="analysisInterval" 
-                                   value="3" min="1" max="60">
-                            <p class="config-help">每个分析项之间的等待时间，避免API频率限制</p>
+                                   value="3" min="1" max="300">
+                            <p class="config-help">每个分析项之间的等待时间，最大5分钟，避免API频率限制</p>
                         </div>
 
                         <div class="config-group">
@@ -668,6 +668,16 @@
                                     </div>
                                 </label>
                             </div>
+                            <div class="provider-option">
+                                <input type="radio" id="providerMiniMax" name="modelProvider" value="MiniMax">
+                                <label for="providerMiniMax" class="provider-label">
+                                    <div class="provider-icon">⚡</div>
+                                    <div class="provider-info">
+                                        <span class="provider-name">MiniMax</span>
+                                        <span class="provider-desc">OpenAI 兼容接口</span>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -684,9 +694,11 @@
                         <div class="config-group">
                             <label for="deepseekApiKey">API Key：</label>
                             <div class="api-key-input">
-                                <input type="password" id="deepseekApiKey" name="deepseekApiKey" 
-                                       placeholder="sk-xxxxxxxxxxxxxxxxxxxxx">
-                                <button type="button" class="toggle-visibility" data-target="deepseekApiKey">
+                                <input type="password" id="deepseekApiKey" name="deepseekApiKey"
+                                       placeholder="请在 .env 中设置 DEEPSEEK_API_KEY"
+                                       disabled
+                                       title="API Key 配置已移至 .env 文件">
+                                <button type="button" class="toggle-visibility" data-target="deepseekApiKey" disabled>
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
@@ -708,13 +720,42 @@
                         <div class="config-group">
                             <label for="geminiApiKey">API Key：</label>
                             <div class="api-key-input">
-                                <input type="password" id="geminiApiKey" name="geminiApiKey" 
-                                       placeholder="AIxxxxxxxxxxxxxxxxxxxxx">
-                                <button type="button" class="toggle-visibility" data-target="geminiApiKey">
+                                <input type="password" id="geminiApiKey" name="geminiApiKey"
+                                       placeholder="请在 .env 中设置 GEMINI_API_KEY"
+                                       disabled
+                                       title="API Key 配置已移至 .env 文件">
+                                <button type="button" class="toggle-visibility" data-target="geminiApiKey" disabled>
+                                    <i class="fas fa-eye"></i>
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
                             <div class="key-status" id="geminiKeyStatus"></div>
+                        </div>
+                    </div>
+
+                    <!-- MiniMax 配置 -->
+                    <div class="settings-section provider-config" id="minimaxConfig" style="display: none;">
+                        <h4><i class="fas fa-cog"></i> MiniMax 配置</h4>
+                        <div class="config-group">
+                            <label for="minimaxModel">模型选择：</label>
+                            <select id="minimaxModel" name="minimaxModel">
+                                <option value="MiniMax-M3" selected>MiniMax-M3 (推荐)</option>
+                                <option value="MiniMax-M2.7-highspeed">MiniMax-M2.7-highspeed</option>
+                                <option value="MiniMax-M2.7">MiniMax-M2.7</option>
+                            </select>
+                        </div>
+                        <div class="config-group">
+                            <label for="minimaxApiKey">API Key：</label>
+                            <div class="api-key-input">
+                                <input type="password" id="minimaxApiKey" name="minimaxApiKey"
+                                       placeholder="请在 .env 中设置 MINIMAX_API_KEY"
+                                       disabled
+                                       title="API Key 配置已移至 .env 文件">
+                                <button type="button" class="toggle-visibility" data-target="minimaxApiKey" disabled>
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="key-status" id="minimaxKeyStatus"></div>
                         </div>
                     </div>
 

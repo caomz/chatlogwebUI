@@ -10,7 +10,7 @@
 
 🔍 **智能查询** - 多维度聊天记录搜索，支持时间、联系人、关键词等条件筛选
 
-🤖 **AI分析** - 集成DeepSeek和Gemini模型，提供智能内容分析和洞察
+🤖 **AI分析** - 集成DeepSeek、Gemini、MiniMax模型，提供智能内容分析和洞察
 
 📊 **数据可视化** - 丰富的图表展示和统计分析功能
 
@@ -141,7 +141,7 @@ PORT=8080 npm start
 - **预设模板**：编程技术、科学学习、阅读讨论分析
 - **自定义分析**：支持自定义提示词
 - **批量分析**：一键分析多个群聊
-- **多模型支持**：DeepSeek、Gemini模型任选
+- **多模型支持**：DeepSeek、Gemini、MiniMax模型任选
 
 ### 可视化报告
 - 生成HTML分析报告
@@ -165,6 +165,49 @@ PORT=8080 npm start
 - `gemini-2.5-pro` - 最新Pro模型（推荐）
 - `gemini-pro` - 标准Pro模型
 - `gemini-pro-vision` - 多模态模型
+
+### MiniMax（OpenAI兼容）
+- `MiniMax-M2.7` - 通用与代码规划推荐模型
+- `MiniMax-M2.7-highspeed` - 高速版本
+
+## 🔌 API 接口（新增）
+
+### `POST /api/coding-plan`
+基于 MiniMax 生成结构化 coding plan（Markdown）。
+
+请求体：
+```json
+{
+  "task": "实现一个带重试和日志的文件上传接口",
+  "context": "Node.js + Express + existing middleware",
+  "constraints": "不能引入新数据库，保持现有路由风格",
+  "outputLang": "zh-CN"
+}
+```
+
+成功响应：
+```json
+{
+  "success": true,
+  "planMarkdown": "# ...",
+  "meta": {
+    "provider": "MiniMax",
+    "model": "MiniMax-M2.7",
+    "latencyMs": 1234,
+    "usage": {}
+  }
+}
+```
+
+失败响应：
+```json
+{
+  "success": false,
+  "error": "错误信息",
+  "errorCode": "CODING_PLAN_ERROR",
+  "httpStatus": 500
+}
+```
 
 ## 🛠️ 开发
 

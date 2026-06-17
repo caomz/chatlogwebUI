@@ -1,12 +1,13 @@
 {
-  "modelProvider": "DeepSeek",
+  "modelProvider": "MiniMax",
   "deepseek": {
-    "model": "deepseek-reasoner",
-    "apiKey": "xx"
+    "model": "deepseek-chat"
   },
   "gemini": {
-    "model": "gemini-2.5-pro",
-    "apiKey": "xx"
+    "model": "gemini-2.5-pro"
   },
-  "updatedAt": "2025-07-01T11:15:26.302Z"
+  "minimax": {
+    "model": "MiniMax-M3"
+  },
+  "updatedAt": "2026-06-03T23:58:02.775Z"
 }
