@@ -1,5 +1,6 @@
 {
-  "modelProvider": "MiniMax",
+  "_comment": "Example model-settings.json — server.js 启动时如果 model-settings.json 不存在会用 getDefaultModelSettings() 重新生成,不需要手动复制本文件。如果要定制,把 modelProvider 改成你常用的(DeepSeek / Gemini / MiniMax)并保存到 model-settings.json(不入仓)。",
+  "modelProvider": "DeepSeek",
   "deepseek": {
     "model": "deepseek-chat"
   },
@@ -9,5 +10,5 @@
   "minimax": {
     "model": "MiniMax-M3"
   },
-  "updatedAt": "2026-06-17T11:13:46.894Z"
+  "updatedAt": "1970-01-01T00:00:00.000Z"
 }
