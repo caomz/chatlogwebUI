@@ -200,9 +200,12 @@ function normalizeModelSettings(rawSettings = {}) {
 }
 
 function getProviderKey(provider) {
-  if (provider === 'DeepSeek') return 'deepseek';
-  if (provider === 'Gemini') return 'gemini';
-  if (provider === 'MiniMax') return 'minimax';
+  // 同时接受 PascalCase(展示名)和 lowercase(配置键名,前端/AGENTS.md 规范),
+  // 统一返回 lowercase 键名供其它代码路径使用(getEnvApiKey / 启动迁移 / test handler 分支)。
+  const normalized = typeof provider === 'string' ? provider.toLowerCase() : '';
+  if (normalized === 'deepseek') return 'deepseek';
+  if (normalized === 'gemini') return 'gemini';
+  if (normalized === 'minimax') return 'minimax';
   return null;
 }
 
@@ -2907,11 +2910,13 @@ app.post('/api/model-settings/test', async (req, res) => {
 
     let testResult;
 
-    if (provider === 'DeepSeek') {
+    // 用归一化后的 providerKey(lowercase)做分支,跟 GET /api/model-settings
+    // 返回的 hasApiKey 键名一致,避免和前端 lowercase 字段不匹配。
+    if (providerKey === 'deepseek') {
       testResult = await testDeepSeekConnection(apiKey, model);
-    } else if (provider === 'Gemini') {
+    } else if (providerKey === 'gemini') {
       testResult = await testGeminiConnection(apiKey, model);
-    } else if (provider === 'MiniMax') {
+    } else if (providerKey === 'minimax') {
       testResult = await testMiniMaxConnection(apiKey, model);
     } else {
       return res.status(400).json({
