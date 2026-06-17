@@ -2493,7 +2493,7 @@ app.post('/api/save-analysis-config', (req, res) => {
     if (!analysisConfig) {
       return res.status(400).json({
         success: false,
-        error: '分析配置不能为空'
+        error: '请求体缺少 analysisConfig 包装(请传 {"analysisConfig": {...}})'
       });
     }
 
