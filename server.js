@@ -296,9 +296,19 @@ app.get('/api/chatlog', async (req, res) => {
     if (error.response) {
       console.error('API错误响应:', error.response.status, error.response.data);
     }
-    res.status(500).json({ 
-      error: '获取聊天记录失败', 
-      message: error.response?.data?.message || error.message 
+    // 上游 4xx 是客户端问题(缺 talker / time 格式错),propagate 4xx 让前端区分
+    // 上游 5xx 或网络错才是 server-side 问题,返回 500
+    const upstreamStatus = error.response?.status;
+    if (upstreamStatus && upstreamStatus >= 400 && upstreamStatus < 500) {
+      return res.status(upstreamStatus).json({
+        error: '聊天记录请求参数有误(请指定 talker 或调整 time 参数)',
+        upstreamStatus,
+        message: error.response?.data?.message || error.message
+      });
+    }
+    res.status(500).json({
+      error: '获取聊天记录失败',
+      message: error.response?.data?.message || error.message
     });
   }
 });
