@@ -1829,8 +1829,8 @@ app.get('/analysis/:id', (req, res) => {
 app.get('/api/test-deepseek', async (req, res) => {
   try {
     console.log('测试DeepSeek API密钥...');
-    console.log('API密钥前8位:', DEEPSEEK_API_KEY.substring(0, 8) + '****');
-    
+    console.log('API密钥是否已配置:', DEEPSEEK_API_KEY ? '是' : '否');
+
     const response = await axios.post(`${DEEPSEEK_API_BASE}/chat/completions`, {
       model: 'deepseek-reasoner',
       messages: [
@@ -1848,8 +1848,8 @@ app.get('/api/test-deepseek', async (req, res) => {
       timeout: 10000
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'DeepSeek API连接成功',
       response: response.data.choices[0].message.content
     });
@@ -1858,10 +1858,10 @@ app.get('/api/test-deepseek', async (req, res) => {
     if (error.response) {
       console.error('API错误响应:', error.response.status, error.response.data);
     }
-    res.status(500).json({ 
+    // 不在 HTTP response 里回显 key 前缀或任何 key 片段,只返回错误描述
+    res.status(500).json({
       success: false,
       error: error.message,
-      apiKey: DEEPSEEK_API_KEY ? `${DEEPSEEK_API_KEY.substring(0, 8)}****` : '未设置',
       details: error.response?.data || '无详细信息'
     });
   }
